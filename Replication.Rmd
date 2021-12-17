@@ -1,0 +1,262 @@
+---
+title: "Replication and Extension Project"
+author: "Ekin Alpay"
+date: "12/17/2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, echo= TRUE, include=TRUE, eval=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+## Loading packages
+install.packages("Amelia")
+library(Amelia)
+library(foreign)
+library(plyr)
+library(ggplot2)
+install.packages("reshape")
+library(reshape)
+install.packages("miceadds")
+library(miceadds)
+
+```
+
+As the inter-state and in-state conflicts increased and became a phenomenon that has global impacts, sanctions have been 
+a widely used coercive tool either through channels of international organizations or unilateral incentives of individual 
+states. Relatedly, effectiveness of those sanctions has been a valid and extensive research topic. Conflict studies literature worked extensively on this question and exhausted several different combinations of confounding variables and underlying conditions for the sanctions to be effective punishment and preventive tools. The paper I try to replicate and extend here similarly considers the same question and revise the previous literature along with the variables they suggested. According to Bapat et.al (2012), previous studies generated mixed results because they mostly used one regression, including new control variables each time to ensure the robustness of the model. In this case, a variable can be important in one analysis and not in the other, thus the results might not solely indicate which variable matters the most but might be that of a selection problem or model specific result. 
+
+In the face of this, they gather all 18 variables that the literature has been talking about as a sanction effectiveness 
+determinant and control for their impact. They impute these variables six times and run “every possible regression” with different sets of combinations of those variables through Bernoulli logistic regression and provide distributions of estimated parameters. This model is used to determine whether the dependent variable falls into one of the binary outcome categories. They also run three different sets of analyses for; only imposed sanctions, only threatened but not imposed sanctions and both all together in order to see which variables increase the probability of success of the sender, and which factors are effective at different stages. 
+
+At this point, we should consider why it is important to study this; Why should we care? I think the reasons are 
+two-fold; one is related to the explanatory power of the studies on this issue area in the discipline of political science 
+and the other is related to the methodological sophistication in the discipline. First of all, apart from the theoretical constructs, sanctions are a real-life matter that requires tremendous resources to implement and many of the historical cases of sanctions are thought to be inefficient, if not wasteful all together. Thus, if our discipline is able to explain under what circumstances, what kinds of sanctions can be effective, it could be a huge step in conflict studies and how to prevent, punish or retaliate aggression. Not only in terms of a disciplinary moment but this could have a huge real-life impact as well in changing the perceptions and most importantly use of sanctions. On the other hand, this could mean a milestone in applying those regression models with several variables, 18 in this case, in terms of how to look for robustness in such cases and ensure that the model specifications do not put a burden on the results. Therefore, it will contribute to the methodological advancement and linked explanatory power of the discipline. 
+
+In the light of these, for the replication of the results, I will consider only those cases where the sanctions are imposed and only focus on the coefficients dismissing the t-values. My main focus is on Figure 2 (Bapat et.al, pg. 91). Since imputing all the variables six times was not possible, I will run only 1 regression function with all the variables and see if the coefficient estimates that I will get will fall into the distributions they provided, after refining and preparing the dataset in the way they did. For the extension partof this paper I will focus on one ambiguous point that the authors did not pay attention to that is there are some variables that cannot go together by definition such as rivalry and carrots or rivalry or ally. As far as I have seen, in the imputation codes, the authors did not distinguished which variables to be used together but rather imputed all 18 factors together. This means that definitively, they might checked for a reality that does not exist. Despite the methodological innovation they claim to offer in this paper, one weakness of their model could be this point.Thus, my extension plan is to refine the regression code to check for these variables in a more consistent manner in terms of these definitive issues. Since my focus will be on those three variables, in this step of this project, I will try replicate 1 coefficient of those three variables through replicating the probit regression function they used. 
+
+```{r data, echo=TRUE, eval=FALSE}
+
+
+## Loading data ##
+data.raw <- get(load("/Users/apple/Documents/GitHub/Replication-1/SancDataForAnalysisVer7.RData"))
+data.raw
+
+
+##data.raw <- data.raw[-which(colnames(data.raw) %in% c("issue11",  "ti1", 
+#                                                   "sender1name", "targetname", "endyear", "sender1",   ##"targetstate","sancstartyear"))]
+
+##This command was given as a command in the syntax, it is not required I think as the dataset loads only with the required numerical variables. 
+##They have already removed these lines in the dataset before making it public. I did not exclude this anyway. 
+
+# Define cases that were only threats
+data.raw$threatonly <- 1 - data.raw$imposition
+
+##As the paper aims to analyze those cases seperately where threats of sanctions were made but not really imposed, they included this distinguishing code here. 
+
+# Define security-related sanctions
+data.raw$security <- 0
+data.raw$security[data.raw$issue_trade == 0 & data.raw$issue_econ == 0 & data.raw$issue_env == 0] <- 1
+
+# Drop unused variables
+data.raw <- data.raw[, c("ally", "capratio", "carrot", "Sdem", "Tdem", "export", "institution", "multiissue",
+                         "multisender", "rivalry", "asendercost", "smartsanc", "CI", "salience",
+                         "Tdependence", "financial", "US", "csendercost", "ctargetcost", "atargetcost", "sendercost",
+                         "targetcost", "LRsuccess", "Tsuccess", "threatonly", "imposition",
+                         "Slnpop", "Tlnpop", "lntrade", "Rsuccess", "issue_trade", "issue_env",
+                         "issue_econ", "TRsuccess", "security")]
+
+
+
+# Transforming data
+to.be.binary <- c("SOECD", "TOECD", "Sinterstate", "Sinternal", "Tinterstate", "Tinternal")
+for(i in 1:length(to.be.binary))
+{
+  k <- which(colnames(data.raw) == to.be.binary[i])
+  data.raw[,k] <- as.integer(data.raw[,k])-1
+}
+
+
+## Standardize several variables
+to.be.stand <- c("CI", "Tlnpop", "Slnpop", "lntrade", "capratio")
+for(i in 1:length(to.be.stand))
+{
+  k <- which(colnames(data.raw) == to.be.stand[i])
+  data.raw[,k] <- (data.raw[,k] - mean(data.raw[,k], na.rm=T))/sd(data.raw[,k], na.rm=T)
+}    
+
+
+# Proper Names
+proper.names <- rbind(c("lntrade", "Trade"), c("capratio", "Capability Ratio"), c("rivalry", "Rivalry"),
+                      c("ally", "Ally"), c("asendercost", "Sender Costs"), c("atargetcost", "Target Costs"),
+                      c("institution", "IO Involvement"), c("multisender", "Multiple Senders"), c("multiissue", "Multiple Issues"),
+                      c("import", "Import Restrictions"), c("carrot", "Carrots"), c("carrotimp", "Carrots"), c("smartsanc", "Smart Sanctions"),
+                      c("Tdem", "Democratic Target"), c("Sdem", "Democratic Sender"), c("CI", "Target Instability"),
+                      c("executive", "Threat by Executive"), c("bspecific", "Behavior Specificity"), c("commit", "Sender Commitment"),
+                      c("targetcost", "Target Costs"), c("sendercost", "Sender Costs"), c("ctargetcost", "Target Costs"),
+                      c("csendercost", "Sender Costs"), c("export","Export Restrictions"), c("financial", "Financial Sanctions"),
+                      c("US", "United States Sender"), c("salience", "High Issue Saliency"), c("Tdependence", "Target Trade Dependence"),
+                      c("threatonly", "Threat-Only Cases"), c("imposition", "Imposed-Only Cases"), c("lntrade", "Trade Volume"),
+                      c("Tlnpop", "Target Population"), c("Slnpop", "Sender Population"), c("LRsuccess", "Success Outcome"), c("Tsuccess", "Success Outcome"))
+colnames(proper.names) <- c("Variable", "VariableProper")
+proper.names <- as.data.frame(proper.names)
+
+
+## Missingness 
+
+library(dplyr)
+library(plyr)
+the.vars <- c("ally", "capratio", "carrot", "Sdem", "Tdem", "export", "institution", "multiissue",
+              "multisender", "rivalry", "sendercost", "smartsanc", "CI", "targetcost", "Tdependence",
+              "salience", "financial", "US", "ctargetcost", "csendercost", "atargetcost", 
+              "asendercost", "LRsuccess", "Tsuccess")
+data.raw$Groups <- "All"
+data.raw$Groups[data.raw$threatonly==1] <- "Threat Only"
+data.raw$Groups[data.raw$imposition==1] <- "Imposed Only"
+data.ms1 <- ddply(.data=data.raw, .variables="Groups", 
+                  .fun=function(y) adply(.data=y, .margins=2, .fun=function(x) sum(is.na(x))/nrow(y)))
+data.ms2 <- adply(.data=data.raw, .margins=2, .fun=function(x) sum(is.na(x))/nrow(data.raw))
+data.ms <- rbind(data.ms1, data.frame(Groups="All", X1=data.ms2[,1], V1=data.ms2[,2]))
+data.ms <- subset(data.ms, X1 %in% the.vars)
+colnames(data.ms) <- c("Groups", "Variable", "Missingness")
+data.ms <- merge(data.ms, proper.names, by="Variable")
+data.ms <- data.ms[(data.ms$Variable == "Tsuccess" & data.ms$Groups == "Imposed Only") == FALSE,]
+
+data.ms <- data.ms[(data.ms$Variable == "ctargetcost" & data.ms$Groups == "Imposed Only") == FALSE,]
+data.ms <- data.ms[(data.ms$Variable == "csendercost" & data.ms$Groups == "Imposed Only") == FALSE,]
+data.ms <- data.ms[(data.ms$Variable == "atargetcost" & data.ms$Groups == "Imposed Only") == FALSE,]
+data.ms <- data.ms[(data.ms$Variable == "asendercost" & data.ms$Groups == "Imposed Only") == FALSE,]
+data.ms <- subset(data.ms, Variable != "imposition")
+data.ms$VariableProper <- as.character(data.ms$VariableProper)
+
+##Runs Begin: 
+
+the.DVs <- c("Restrictive", "Less Restrictive")
+#models <- list(One=list(name="All Cases",
+#                        the.vars <- c("ally", "capratio", "carrot", "Sdem", "Tdem", "export", "institution", "multiissue",
+#                                     "multisender", "rivalry", "csendercost", "smartsanc", "CI", "ctargetcost", "Tdependence",                                      "salience", "financial", "US")),
+#               Two=list(name="Threats Only",
+#                        the.vars <- c("ally", "capratio", "carrot", "Sdem", "Tdem", "export", "institution", "multiissue",
+#                                      "multisender", "rivalry", "asendercost", "smartsanc", "CI", "atargetcost", "Tdependence",
+#                                      "salience", "financial", "US")),
+#               Three=list(name="Impositions Only",
+#                          the.vars <- c("ally", "capratio", "carrot", "Sdem", "Tdem", "export", "institution", "multiissue",
+#                                        "multisender", "rivalry", "sendercost", "smartsanc", "CI", "targetcost", "Tdependence",
+#                                        "salience", "financial", "US")))
+
+##Here is the original code to specify the models for analyses. Authors wanted to analyze three models 
+#where only threats, only imposed sanctions and all of them together are analyzed separately as different combinations. 
+##I will only look at the thirds model of only impositions. So here is the code for that: 
+
+models <- list( One=list(name="Impositions Only",
+                          the.vars <- c("ally", "capratio", "carrot", "Sdem", "Tdem", "export", "institution", "multiissue",
+                                        "multisender", "rivalry", "sendercost", "smartsanc", "CI", "targetcost", "Tdependence",
+                                        "salience", "financial", "US")))
+samples <- c("Security", "All")                          
+
+
+##Right after this point there is an imputation code chunk follows, which imputes the data 6 times and creates different data sets. 
+## I excluded this part firstly, just to see if I can still generate the same results or any result that fall within their distribution
+##estimated coefficients. Secondly, my computer was not able to run the code until the ends so I had to interrupt the R. 
+
+## Loop that runs all estimations
+for(j in 1:length(the.DVs))
+{
+  for(m in 1:length(samples))
+  {
+    for(k in 1:length(models))
+    {
+      the.vars <- models[[k]][[2]]
+      if(models[[k]]$name == "Impositions Only") cases <- "imposition"
+
+      
+      if(samples[m] == "Security") security <- 1
+      if(samples[m] == "All") security <- 0
+      
+      ##if(the.DVs[j] == "Restrictive")
+      ##{
+       ## if(cases == "imposition" | cases == "NA") the.DV <- "Rsuccess"
+
+     ## }        
+      
+      if(the.DVs[j] == "Less Restrictive")
+      {
+        if(cases == "imposition" | cases == "NA") the.DV <- "LRsuccess"
+      } } }}
+```
+This loop function originally included ggplot codes for the distribution of all the estimates for 18 factors. I excluded them since I am not trying to replicate that part. I excluded "Threats Only" cases as well from the models, as only the imposed sanctions are of my interest. Also they distinguished the dependent variables as Restrictive and Less Restrictive 
+However, no such distinguishment is mentioned in the Figure 2 or anywhere in the paper therefore, I will use the LRsuccess 
+as the outcome variable since only that one is included in the data sets. Also Tsuccess variable is for the success of threats rather than imposed outcomes, which fall out of my scope for this project. In this sense, LRsuccess seems to be the best fit. 
+
+```{r regression replication, echo=TRUE, eval=FALSE}
+
+install.packages("devtools")
+install.packages("specr")
+"https://masurp.github.io/specr/index.html"
+devtools::install_github("masurp/specr")
+library(specr)
+
+
+# specific model fitting function
+glm_probit <- function(formula, data) {
+  glm(formula= formula, 
+      data = data.raw, 
+      family = binomial(link = "probit"))
+}
+
+
+res_ally <- run_specs(df=data.raw,
+    y="LRsuccess",
+    x=the.vars[1],
+    controls = the.vars[2:15],
+    model=c("glm_probit"),
+    all.comb=TRUE)
+
+res_ally
+
+##Here this function creates the glm function by taking the first variable as an IV and then adds different combinations of control variables to see the coefficients estimated for the IV tested. It is possible to run the same function for more than one IV however, due to the computation limits, I will deliver only one variable across different ones.
+
+```
+The function above with the specification curves runs a glm function for the "ally" variable as the dependent variable with a combination with first 10 variables as controls. It generates a matrix of (512x 19) covering estimates for "ally" in different models. 
+
+According to the results of this function, coefficients for the "ally" variable fell into the given distribution graph. In this sense, this model predicted coefficients for these variables from this one set correctly, considering they used many imputated combinations of these variables. 
+
+```{r extension functions nonlinear, echo=TRUE, eval=FALSE}
+
+##Non-lienar with square of the dependent variable;
+
+data.raw$capratio2 = data.raw$capratio * data.raw$capratio
+
+capratio3 <- data.raw$capratio + data.raw$capratio2
+
+models <- list( One=list(name="Impositions Only",
+                          the.vars <- c("capratio", "capratio2", "capratio3", "ally", "carrot", "Sdem", "Tdem", "export", "institution", "multiissue",
+                                        "multisender", "rivalry", "sendercost", "smartsanc", "CI", "targetcost", "Tdependence",
+                                        "salience", "financial", "US")))
+
+res_cap11 <- run_specs(df = data.raw,
+    y= "LRsuccess", 
+    x= the.vars[3], 
+    controls = the.vars[4:17],
+    all.comb=TRUE,
+    model = "lm")
+
+res_cap11
+
+
+
+densest <- density(res_cap11$estimate)
+plot(densest)
+
+
+
+ggplot(data =  res_cap11, aes(x=estimate)) +
+    geom_density(fill="pink", color="pink", alpha=.7) + scale_x_continuous(breaks = seq(from = -1 , to = 4 , by = 1), limits = c(-1,4))
+
+
+```
+
+References: 
+1. Bapat, N. A., Heinrich, T., Kobayashi, Y., & Morgan, T. C. (2013). Determinants of Sanctions Effectiveness: Sensitivity Analysis Using New Data. International Interactions, 39(1), 79-98. doi:10.1080/03050629.2013.751298
+
